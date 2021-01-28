@@ -18,6 +18,7 @@ use Silarhi\Cfonb\Banking\Balance;
 use Silarhi\Cfonb\Banking\Operation;
 use Silarhi\Cfonb\Banking\OperationDetail;
 use Silarhi\Cfonb\Banking\Statement;
+use Silarhi\Cfonb\Banking\StatementCollection;
 use Silarhi\Cfonb\Contracts\ParserInterface;
 use Silarhi\Cfonb\Exceptions\ParseException;
 use Silarhi\Cfonb\Parser\Cfonb120\EmptyParser;
@@ -55,36 +56,23 @@ class Cfonb120Reader
             $content = chunk_split($content, 120, "\n");
         }
 
-        $statementList = [];
         $lines         = explode("\n", $content);
-        $statement     = new Statement();
+        $statementList = new StatementCollection();
         $lastOperation = null;
 
         foreach ($lines as $line) {
             $result = $this->findSupportedParserForLine($line)->parse($line);
 
             if ($result instanceof Balance) {
-                $lastOperation = null;
-                if ($statement->hasOldBalance() === false) {
-                    $statement->setOldBalance($result);
-                } else {
-                    $statement->setNewBalance($result);
-                    $statementList[] = $statement;
-                    $statement       = new Statement();
-                }
+                $statementList->addBalance($result);
             } elseif ($result instanceof Operation) {
-                $lastOperation = $result;
-                $statement->addOperation($result);
+                $statementList->addOperation($result);
             } elseif ($result instanceof OperationDetail) {
-                if ($lastOperation === null) {
-                    throw new ParseException(sprintf('Unable to attach a detail for operation with internal code %s', $result->getInternalCode()));
-                }
-
-                $lastOperation->addDetails($result);
+                $statementList->addOperationDetail($result);
             }
         }
 
-        return $statementList;
+        return $statementList->toArray();
     }
 
     private function findSupportedParserForLine(string $line): ParserInterface
